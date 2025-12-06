@@ -9,7 +9,6 @@ A Python library for managing geometric objects across coordinate frames, design
 - **Objects**: Geometric entities (points, lines, spheres, etc.) from scikit-spatial, each with a unique ID
 - **Scenes**: Collections of objects with coordinates in specific frames (e.g., from a particular instrument or construction step)
 - **Configurations**: Different spatial arrangements defining how frames relate via rigid transforms
-- **Transform graphs**: Acyclic undirected graphs (forests) connecting frames through transforms
 
 ## Installation
 
