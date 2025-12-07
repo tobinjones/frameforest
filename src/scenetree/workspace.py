@@ -81,7 +81,9 @@ class Scene:
         self.update(objects)
         return self
 
-    def points_from_observations(self, observations: Iterable[tuple[str, npt.ArrayLike]]) -> None:
+    def add_points_from_observations(
+        self, observations: Iterable[tuple[str, npt.ArrayLike]]
+    ) -> None:
         """Add Points objects from an iterable of named point observations.
 
         Multiple observations with the same object_id are coalesced into a single
