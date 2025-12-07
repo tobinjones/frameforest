@@ -1,8 +1,11 @@
 """Core workspace for managing geometric objects across coordinate frames."""
 
 from collections.abc import Iterator
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Self
 
+import numpy as np
+import numpy.typing as npt
 from pytransform3d.transform_manager import TransformManager
 
 if TYPE_CHECKING:
@@ -77,6 +80,80 @@ class Scene:
         return self
 
 
+class Configuration:
+    """Proxy object for managing transforms between scenes.
+
+    Configuration objects are lightweight proxies that reference a TransformManager
+    stored in the parent Workspace. They should not be stored long-term; retrieve
+    a fresh proxy from the workspace when needed.
+    """
+
+    def __init__(self, workspace: "Workspace", name: str) -> None:
+        """Initialize a configuration proxy.
+
+        Args:
+            workspace: The parent workspace containing the configuration data.
+            name: The name of this configuration.
+        """
+        self._workspace = workspace
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        """The configuration name."""
+        return self._name
+
+    def _get_tm(self) -> TransformManager:
+        """Get the underlying TransformManager."""
+        return self._workspace._configurations[self._name]
+
+    def connect(
+        self, from_scene: str, to_scene: str, transform: npt.NDArray[np.floating[Any]]
+    ) -> None:
+        """Add a transform connecting two scenes.
+
+        Args:
+            from_scene: The source scene name.
+            to_scene: The destination scene name.
+            transform: A 4x4 homogeneous transformation matrix.
+
+        Raises:
+            KeyError: If either scene doesn't exist in the workspace.
+        """
+        if from_scene not in self._workspace._scenes:
+            raise KeyError(f"Scene '{from_scene}' does not exist")
+        if to_scene not in self._workspace._scenes:
+            raise KeyError(f"Scene '{to_scene}' does not exist")
+        self._get_tm().add_transform(from_scene, to_scene, transform)
+
+    def get_transform(self, from_scene: str, to_scene: str) -> npt.NDArray[np.floating[Any]]:
+        """Get the transform between two scenes.
+
+        If the scenes are not directly connected, the transform will be computed
+        by following the path through the transform graph.
+
+        Args:
+            from_scene: The source scene name.
+            to_scene: The destination scene name.
+
+        Returns:
+            A 4x4 homogeneous transformation matrix.
+
+        Raises:
+            KeyError: If no path exists between the scenes.
+        """
+        return self._get_tm().get_transform(from_scene, to_scene)
+
+    def as_transform_manager(self) -> TransformManager:
+        """Return a copy of the underlying TransformManager.
+
+        Returns:
+            A deep copy of the TransformManager, safe to modify without
+            affecting the workspace.
+        """
+        return deepcopy(self._get_tm())
+
+
 class Workspace:
     """Container for geometric objects organized by scenes and configurations.
 
@@ -106,6 +183,41 @@ class Workspace:
             raise ValueError(f"Scene '{name}' already exists")
         self._scenes[name] = {}
         return Scene(self, name)
+
+    def create_configuration(self, name: str) -> Configuration:
+        """Create a new configuration and return a proxy to it.
+
+        Args:
+            name: The name for the new configuration.
+
+        Returns:
+            A Configuration proxy for the newly created configuration.
+
+        Raises:
+            ValueError: If a configuration with this name already exists.
+        """
+        if name in self._configurations:
+            raise ValueError(f"Configuration '{name}' already exists")
+        self._configurations[name] = TransformManager()
+        return Configuration(self, name)
+
+    def configuration(self, name: str) -> Configuration:
+        """Get a configuration proxy by name.
+
+        Args:
+            name: The name of the configuration.
+
+        Returns:
+            A Configuration proxy.
+
+        Raises:
+            KeyError: If the configuration doesn't exist.
+        """
+        if name not in self._configurations:
+            raise KeyError(
+                f"Configuration '{name}' does not exist. Use create_configuration() first."
+            )
+        return Configuration(self, name)
 
     def __getitem__(self, scene: str) -> Scene:
         """Get a scene proxy by name: ws['scene_A']
