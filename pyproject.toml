@@ -1,7 +1,7 @@
 [project]
-name = "frameforest"
+name = "scenetree"
 version = "0.1.0"
-description = "Add your description here"
+description = "Manage geometric objects across coordinate frames"
 readme = "README.md"
 authors = [
     { name = "Claude", email = "noreply@anthropic.com" }
