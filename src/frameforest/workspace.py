@@ -9,76 +9,76 @@ if TYPE_CHECKING:
     from collections.abc import ItemsView
 
 
-class Frame:
-    """Proxy object providing dict-like access to objects in a frame.
+class Scene:
+    """Proxy object providing dict-like access to objects in a scene.
 
-    Frame objects are lightweight proxies that reference data stored in the
+    Scene objects are lightweight proxies that reference data stored in the
     parent Workspace. They should not be stored long-term; retrieve a fresh
     proxy from the workspace when needed.
     """
 
     def __init__(self, workspace: "Workspace", name: str) -> None:
-        """Initialize a frame proxy.
+        """Initialize a scene proxy.
 
         Args:
-            workspace: The parent workspace containing the frame data.
-            name: The name of this frame.
+            workspace: The parent workspace containing the scene data.
+            name: The name of this scene.
         """
         self._workspace = workspace
         self._name = name
 
     @property
     def name(self) -> str:
-        """The frame name."""
+        """The scene name."""
         return self._name
 
     def _get_data(self) -> dict[str, Any]:
-        """Get the underlying data dict, raising KeyError if frame doesn't exist."""
+        """Get the underlying data dict, raising KeyError if scene doesn't exist."""
         return self._workspace._scenes[self._name]
 
     def __getitem__(self, object_id: str) -> Any:
-        """Get an object by ID: frame['QP.F1']"""
+        """Get an object by ID: scene['QP.F1']"""
         return self._get_data()[object_id]
 
     def __setitem__(self, object_id: str, data: Any) -> None:
-        """Set an object by ID: frame['QP.F1'] = point"""
+        """Set an object by ID: scene['QP.F1'] = point"""
         self._get_data()[object_id] = data
 
     def __delitem__(self, object_id: str) -> None:
-        """Delete an object by ID: del frame['QP.F1']"""
+        """Delete an object by ID: del scene['QP.F1']"""
         del self._get_data()[object_id]
 
     def __contains__(self, object_id: object) -> bool:
-        """Check if object exists: 'QP.F1' in frame"""
+        """Check if object exists: 'QP.F1' in scene"""
         try:
             return object_id in self._get_data()
         except KeyError:
             return False
 
     def __iter__(self) -> Iterator[str]:
-        """Iterate over object IDs: for obj_id in frame"""
+        """Iterate over object IDs: for obj_id in scene"""
         return iter(self._get_data())
 
     def __len__(self) -> int:
-        """Number of objects in frame: len(frame)"""
+        """Number of objects in scene: len(scene)"""
         return len(self._get_data())
 
     def items(self) -> "ItemsView[str, Any]":
-        """Dict-like items(): for obj_id, data in frame.items()"""
+        """Dict-like items(): for obj_id, data in scene.items()"""
         return self._get_data().items()
 
     def update(self, objects: dict[str, Any]) -> None:
-        """Batch add objects: frame.update({'QP.F1': p1, 'QP.F2': p2})"""
+        """Batch add objects: scene.update({'QP.F1': p1, 'QP.F2': p2})"""
         self._get_data().update(objects)
 
     def __ior__(self, objects: dict[str, Any]) -> Self:
-        """Batch add objects: frame |= {'QP.F1': p1, 'QP.F2': p2}"""
+        """Batch add objects: scene |= {'QP.F1': p1, 'QP.F2': p2}"""
         self.update(objects)
         return self
 
 
 class Workspace:
-    """Container for geometric objects organized by frames and configurations.
+    """Container for geometric objects organized by scenes and configurations.
 
     The workspace manages:
     - Scenes: Collections of geometric objects with coordinates in specific frames
@@ -90,37 +90,37 @@ class Workspace:
         self._scenes: dict[str, dict[str, Any]] = {}
         self._configurations: dict[str, TransformManager] = {}
 
-    def create_frame(self, name: str) -> Frame:
-        """Create a new frame and return a proxy to it.
+    def create_scene(self, name: str) -> Scene:
+        """Create a new scene and return a proxy to it.
 
         Args:
-            name: The name for the new frame.
+            name: The name for the new scene.
 
         Returns:
-            A Frame proxy for the newly created frame.
+            A Scene proxy for the newly created scene.
 
         Raises:
-            ValueError: If a frame with this name already exists.
+            ValueError: If a scene with this name already exists.
         """
         if name in self._scenes:
-            raise ValueError(f"Frame '{name}' already exists")
+            raise ValueError(f"Scene '{name}' already exists")
         self._scenes[name] = {}
-        return Frame(self, name)
+        return Scene(self, name)
 
-    def __getitem__(self, frame: str) -> Frame:
-        """Get a frame proxy by name: ws['frame_A']
+    def __getitem__(self, scene: str) -> Scene:
+        """Get a scene proxy by name: ws['scene_A']
 
         Raises:
-            KeyError: If the frame doesn't exist (use create_frame first).
+            KeyError: If the scene doesn't exist (use create_scene first).
         """
-        if frame not in self._scenes:
-            raise KeyError(f"Frame '{frame}' does not exist. Use create_frame() first.")
-        return Frame(self, frame)
+        if scene not in self._scenes:
+            raise KeyError(f"Scene '{scene}' does not exist. Use create_scene() first.")
+        return Scene(self, scene)
 
-    def __contains__(self, frame: object) -> bool:
-        """Check if frame exists: 'frame_A' in ws"""
-        return frame in self._scenes
+    def __contains__(self, scene: object) -> bool:
+        """Check if scene exists: 'scene_A' in ws"""
+        return scene in self._scenes
 
     def __iter__(self) -> Iterator[str]:
-        """Iterate over frame names: for frame in ws"""
+        """Iterate over scene names: for scene in ws"""
         return iter(self._scenes)

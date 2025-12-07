@@ -28,10 +28,15 @@ pip install frameforest
 from frameforest import Workspace
 
 # Create a workspace
-workspace = Workspace()
+ws = Workspace()
 
-# scenes: dict mapping frame names to objects in that frame
-# configurations: dict mapping configuration names to TransformManagers
+# Create scenes and add objects
+scene = ws.create_scene("laser_scan")
+scene["QP.F1"] = Point([1, 2, 3])
+scene |= {"QP.F2": Point([4, 5, 6]), "QP.F3": Point([7, 8, 9])}
+
+# Access objects
+point = ws["laser_scan"]["QP.F1"]
 ```
 
 ## Dependencies

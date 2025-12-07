@@ -36,15 +36,17 @@ In metrology workflows, the same physical object is often measured in different 
 ## Current Implementation
 
 ### Workspace Class (`src/frameforest/workspace.py`)
-A dataclass containing:
-- `scenes: dict[str, dict[str, Any]]` - frame name → (object ID → object data)
-- `configurations: dict[str, TransformManager]` - configuration name → transform graph
+A class containing:
+- `_scenes: dict[str, dict[str, Any]]` - scene name → (object ID → object data)
+- `_configurations: dict[str, TransformManager]` - configuration name → transform graph
 
-The Workspace is currently just a data container with no methods beyond `__init__`.
+### Scene Class (`src/frameforest/workspace.py`)
+A lightweight proxy providing dict-like access to objects in a scene. Supports `[]`, `del`, `in`, iteration, `len()`, `items()`, `update()`, and `|=`.
 
 ### Public API (`src/frameforest/__init__.py`)
 Exports:
 - `Workspace` class
+- `Scene` class
 - `__version__` string
 
 ## Development Patterns
