@@ -8,10 +8,25 @@ from typing import TYPE_CHECKING, Any, Self
 import numpy as np
 import numpy.typing as npt
 from pytransform3d.transform_manager import TransformManager
-from skspatial.objects import Points
+from scipy.spatial.transform import Rotation
+from skspatial.objects import Point, Points
 
 if TYPE_CHECKING:
     from collections.abc import ItemsView
+
+
+def _extract_point_position(obj: Any) -> npt.NDArray[np.floating[Any]]:
+    """Extract a single 3D position from a Point or Points object.
+
+    For Point: returns the point coordinates.
+    For Points: returns the centroid of all points.
+    """
+    if isinstance(obj, Point):
+        return np.asarray(obj)
+    elif isinstance(obj, Points):
+        return np.asarray(obj.centroid())
+    else:
+        raise TypeError(f"Expected Point or Points, got {type(obj).__name__}")
 
 
 class Scene:
@@ -183,6 +198,93 @@ class Configuration:
             affecting the workspace.
         """
         return deepcopy(self._get_tm())
+
+    def best_fit(
+        self,
+        from_scene: str,
+        to_scene: str,
+        object_ids: Iterable[str] | None = None,
+    ) -> npt.NDArray[np.floating[Any]]:
+        """Compute and add a best-fit rigid transform between two scenes.
+
+        Finds Point/Points objects shared between the scenes and computes
+        the optimal rigid transform (rotation + translation) that aligns
+        the from_scene points to the to_scene points using least-squares.
+
+        The computed transform is added to this configuration via connect().
+
+        Args:
+            from_scene: The source scene name.
+            to_scene: The destination scene name.
+            object_ids: Optional subset of object IDs to use for fitting.
+                If None, uses all shared Point/Points objects.
+
+        Returns:
+            The 4x4 homogeneous transformation matrix.
+
+        Raises:
+            KeyError: If either scene doesn't exist.
+            ValueError: If fewer than 3 shared points are found.
+        """
+        if from_scene not in self._workspace._scenes:
+            raise KeyError(f"Scene '{from_scene}' does not exist")
+        if to_scene not in self._workspace._scenes:
+            raise KeyError(f"Scene '{to_scene}' does not exist")
+
+        from_data = self._workspace._scenes[from_scene]
+        to_data = self._workspace._scenes[to_scene]
+
+        # Find shared object IDs that are Point or Points
+        if object_ids is not None:
+            shared_ids = set(object_ids)
+        else:
+            shared_ids = from_data.keys() & to_data.keys()
+
+        # Extract positions for shared points
+        from_positions = []
+        to_positions = []
+        for obj_id in shared_ids:
+            if obj_id not in from_data or obj_id not in to_data:
+                continue
+            try:
+                from_pos = _extract_point_position(from_data[obj_id])
+                to_pos = _extract_point_position(to_data[obj_id])
+                from_positions.append(from_pos)
+                to_positions.append(to_pos)
+            except TypeError:
+                # Skip non-point objects
+                continue
+
+        if len(from_positions) < 3:
+            raise ValueError(
+                f"Need at least 3 shared points for best fit, found {len(from_positions)}"
+            )
+
+        from_points = np.array(from_positions)
+        to_points = np.array(to_positions)
+
+        # Compute centroids
+        from_centroid = from_points.mean(axis=0)
+        to_centroid = to_points.mean(axis=0)
+
+        # Center the point clouds
+        from_centered = from_points - from_centroid
+        to_centered = to_points - to_centroid
+
+        # Find optimal rotation using Kabsch algorithm
+        rotation, _ = Rotation.align_vectors(to_centered, from_centered)
+
+        # Build 4x4 homogeneous transform:
+        # T = translate_to @ rotate @ translate_from_inv
+        # Which transforms a point p as: T @ p = to_centroid + R @ (p - from_centroid)
+        transform = np.eye(4)
+        transform[:3, :3] = rotation.as_matrix()
+        transform[:3, 3] = to_centroid - rotation.apply(from_centroid)
+
+        # Add to configuration
+        self._get_tm().add_transform(from_scene, to_scene, transform)
+
+        return transform
 
 
 class Workspace:
