@@ -405,7 +405,7 @@ class View:
         self,
         object_query: str = "*",
         from_scenes: Iterable[str] | None = None,
-    ) -> dict[str, list[Any]]:
+    ) -> dict[str, Points | list[Any]]:
         """Query objects from multiple scenes, transformed into the reference frame.
 
         Args:
@@ -415,24 +415,39 @@ class View:
                 queries from all scenes connected to the reference scene.
 
         Returns:
-            A dict mapping object_id to a list of transformed objects. If the same
-            object_id appears in multiple scenes, all transformed versions are
-            included in the list. Objects that cannot be transformed (unsupported
-            types) are skipped.
+            A dict mapping object_id to transformed objects. For Point/Points objects,
+            all matching points are consolidated into a single Points object. For other
+            types, returns a list of transformed objects. Unsupported types are skipped.
         """
         scenes_to_query = self._get_connected_scenes() if from_scenes is None else list(from_scenes)
 
-        result: dict[str, list[Any]] = defaultdict(list)
+        # Collect point coordinates separately for consolidation
+        point_coords: dict[str, list[npt.NDArray[np.floating[Any]]]] = defaultdict(list)
+        other_objects: dict[str, list[Any]] = defaultdict(list)
 
         for scene_name in scenes_to_query:
             scene = self._configuration._workspace[scene_name]
             for object_id in scene:
                 if fnmatch(object_id, object_query):
                     transformed = self.get_object(scene_name, object_id)
-                    if transformed is not NotImplemented:
-                        result[object_id].append(transformed)
+                    if transformed is NotImplemented:
+                        continue
+                    if isinstance(transformed, Point):
+                        point_coords[object_id].append(np.asarray(transformed))
+                    elif isinstance(transformed, Points):
+                        # Add each point from the Points object
+                        point_coords[object_id].extend(np.asarray(transformed))
+                    else:
+                        other_objects[object_id].append(transformed)
 
-        return dict(result)
+        # Build result: consolidate points into Points objects
+        result: dict[str, Points | list[Any]] = {}
+        for object_id, coords in point_coords.items():
+            result[object_id] = Points(coords)
+        for object_id, objects in other_objects.items():
+            result[object_id] = objects
+
+        return result
 
 
 class Workspace:
