@@ -291,6 +291,100 @@ class Configuration:
 
         return transform
 
+    def view_from(self, reference_scene: str) -> "View":
+        """Create a View anchored to a reference scene.
+
+        The View allows accessing objects from other scenes transformed
+        into the reference scene's coordinate frame.
+
+        Args:
+            reference_scene: The scene whose coordinate frame to use.
+
+        Returns:
+            A View object for accessing transformed objects.
+
+        Raises:
+            KeyError: If the reference scene doesn't exist.
+        """
+        if reference_scene not in self._workspace._scenes:
+            raise KeyError(f"Scene '{reference_scene}' does not exist")
+        return View(self, reference_scene)
+
+
+class View:
+    """A view into the workspace from a specific scene's coordinate frame.
+
+    Allows accessing objects from other scenes, automatically transformed
+    into the reference scene's coordinate frame using the configuration's
+    transform graph.
+    """
+
+    def __init__(self, configuration: Configuration, reference_scene: str) -> None:
+        """Initialize a view.
+
+        Args:
+            configuration: The configuration providing transforms.
+            reference_scene: The scene whose coordinate frame to use.
+        """
+        self._configuration = configuration
+        self._reference_scene = reference_scene
+
+    @property
+    def reference_scene(self) -> str:
+        """The reference scene name."""
+        return self._reference_scene
+
+    def _transform_point(
+        self, point: npt.NDArray[np.floating[Any]], transform: npt.NDArray[np.floating[Any]]
+    ) -> npt.NDArray[np.floating[Any]]:
+        """Apply a 4x4 homogeneous transform to a 3D point."""
+        homogeneous = np.append(point, 1.0)
+        transformed = transform @ homogeneous
+        return transformed[:3]
+
+    def _transform_points(
+        self, points: npt.NDArray[np.floating[Any]], transform: npt.NDArray[np.floating[Any]]
+    ) -> npt.NDArray[np.floating[Any]]:
+        """Apply a 4x4 homogeneous transform to an array of 3D points."""
+        # points is (n, 3), we need to add homogeneous coordinate
+        n = points.shape[0]
+        homogeneous = np.hstack([points, np.ones((n, 1))])
+        transformed = (transform @ homogeneous.T).T
+        return transformed[:, :3]
+
+    def get_object(self, from_scene: str, object_id: str) -> Point | Points | Any:
+        """Get an object from another scene, transformed into the reference frame.
+
+        Args:
+            from_scene: The scene containing the object.
+            object_id: The object ID to retrieve.
+
+        Returns:
+            The transformed object (Point or Points), or NotImplemented if
+            the object type is not supported.
+
+        Raises:
+            KeyError: If the scene or object doesn't exist, or if no transform
+                path exists between the scenes.
+        """
+        # Get the transform from source scene to reference scene
+        transform = self._configuration.get_transform(from_scene, self._reference_scene)
+
+        # Get the source object
+        source_scene = self._configuration._workspace[from_scene]
+        obj = source_scene[object_id]
+
+        if isinstance(obj, Point):
+            coords = np.asarray(obj)
+            transformed_coords = self._transform_point(coords, transform)
+            return Point(transformed_coords)
+        elif isinstance(obj, Points):
+            coords = np.asarray(obj)
+            transformed_coords = self._transform_points(coords, transform)
+            return Points(transformed_coords)
+        else:
+            return NotImplemented
+
 
 class Workspace:
     """Container for geometric objects organized by scenes and configurations.
