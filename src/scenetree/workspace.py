@@ -251,11 +251,8 @@ class Configuration:
             KeyError: If either scene doesn't exist.
             ValueError: If fewer than 3 shared points are found.
         """
-        from_scene_proxy = self._workspace[from_scene]
-        to_scene_proxy = self._workspace[to_scene]
-
-        from_points_dict = from_scene_proxy.get_mean_points()
-        to_points_dict = to_scene_proxy.get_mean_points()
+        from_points_dict = self._workspace[from_scene].get_mean_points()
+        to_points_dict = self._workspace[to_scene].get_mean_points()
 
         # Find shared object IDs
         if object_ids is not None:
