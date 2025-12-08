@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING, Any, Self
 import numpy as np
 import numpy.typing as npt
 from pytransform3d.transform_manager import TransformManager
-from skspatial.objects import Points
+from scipy.spatial.transform import Rotation
+from skspatial.objects import Point, Points
 
 if TYPE_CHECKING:
     from collections.abc import ItemsView
@@ -110,6 +111,45 @@ class Scene:
         for object_id, coords_list in grouped.items():
             data[object_id] = Points(coords_list)
 
+    def get_point(self, object_id: str) -> npt.NDArray[np.floating[Any]]:
+        """Get a single 3D position for an object.
+
+        For Point objects: returns the point coordinates.
+        For Points objects: returns the centroid of all points.
+
+        Args:
+            object_id: The object ID to look up.
+
+        Returns:
+            A numpy array of shape (3,) with the point coordinates.
+
+        Raises:
+            KeyError: If the object doesn't exist.
+            TypeError: If the object is not a Point or Points.
+        """
+        obj = self._get_data()[object_id]
+        if isinstance(obj, Point):
+            return np.asarray(obj)
+        elif isinstance(obj, Points):
+            return np.asarray(obj.centroid())
+        else:
+            raise TypeError(f"Expected Point or Points, got {type(obj).__name__}")
+
+    def get_mean_points(self) -> dict[str, npt.NDArray[np.floating[Any]]]:
+        """Get mean positions for all Point/Points objects in the scene.
+
+        Returns:
+            A dict mapping object_id to a numpy array of shape (3,).
+            Only includes objects that are Point or Points instances.
+        """
+        result: dict[str, npt.NDArray[np.floating[Any]]] = {}
+        for object_id, obj in self._get_data().items():
+            if isinstance(obj, Point):
+                result[object_id] = np.asarray(obj)
+            elif isinstance(obj, Points):
+                result[object_id] = np.asarray(obj.centroid())
+        return result
+
 
 class Configuration:
     """Proxy object for managing transforms between scenes.
@@ -183,6 +223,73 @@ class Configuration:
             affecting the workspace.
         """
         return deepcopy(self._get_tm())
+
+    def best_fit_points(
+        self,
+        from_scene: str,
+        to_scene: str,
+        object_ids: Iterable[str] | None = None,
+    ) -> npt.NDArray[np.floating[Any]]:
+        """Compute and add a best-fit rigid transform between two scenes.
+
+        Finds Point/Points objects shared between the scenes and computes
+        the optimal rigid transform (rotation + translation) that aligns
+        the from_scene points to the to_scene points using least-squares.
+
+        The computed transform is added to this configuration.
+
+        Args:
+            from_scene: The source scene name.
+            to_scene: The destination scene name.
+            object_ids: Optional subset of object IDs to use for fitting.
+                If None, uses all shared Point/Points objects.
+
+        Returns:
+            The 4x4 homogeneous transformation matrix.
+
+        Raises:
+            KeyError: If either scene doesn't exist.
+            ValueError: If fewer than 3 shared points are found.
+        """
+        from_points_dict = self._workspace[from_scene].get_mean_points()
+        to_points_dict = self._workspace[to_scene].get_mean_points()
+
+        # Find shared object IDs
+        if object_ids is not None:
+            shared_ids = set(object_ids) & from_points_dict.keys() & to_points_dict.keys()
+        else:
+            shared_ids = from_points_dict.keys() & to_points_dict.keys()
+
+        if len(shared_ids) < 3:
+            raise ValueError(f"Need at least 3 shared points for best fit, found {len(shared_ids)}")
+
+        # Build point arrays in consistent order
+        shared_ids_list = list(shared_ids)
+        from_points = np.array([from_points_dict[k] for k in shared_ids_list])
+        to_points = np.array([to_points_dict[k] for k in shared_ids_list])
+
+        # Compute centroids
+        from_centroid = from_points.mean(axis=0)
+        to_centroid = to_points.mean(axis=0)
+
+        # Center the point clouds
+        from_centered = from_points - from_centroid
+        to_centered = to_points - to_centroid
+
+        # Find optimal rotation using Kabsch algorithm
+        rotation, _ = Rotation.align_vectors(to_centered, from_centered)
+
+        # Build 4x4 homogeneous transform:
+        # T = translate_to @ rotate @ translate_from_inv
+        # Which transforms a point p as: T @ p = to_centroid + R @ (p - from_centroid)
+        transform = np.eye(4)
+        transform[:3, :3] = rotation.as_matrix()
+        transform[:3, 3] = to_centroid - rotation.apply(from_centroid)
+
+        # Add to configuration
+        self._get_tm().add_transform(from_scene, to_scene, transform)
+
+        return transform
 
 
 class Workspace:
