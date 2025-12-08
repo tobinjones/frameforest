@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This document provides context for AI assistants working on the frameforest codebase.
+This document provides context for AI assistants working on the scenetree codebase.
 
 ## Project Purpose
 
-frameforest is a Python library for managing geometric objects across coordinate frames, designed for metrology, measurement, fiducialisation, alignment, and adjustment tasks.
+scenetree is a Python library for managing geometric objects across coordinate frames, designed for metrology, measurement, fiducialisation, alignment, and adjustment tasks.
 
 ## Core Concepts
 
@@ -35,16 +35,18 @@ In metrology workflows, the same physical object is often measured in different 
 
 ## Current Implementation
 
-### Workspace Class (`src/frameforest/workspace.py`)
-A dataclass containing:
-- `scenes: dict[str, dict[str, Any]]` - frame name → (object ID → object data)
-- `configurations: dict[str, TransformManager]` - configuration name → transform graph
+### Workspace Class (`src/scenetree/workspace.py`)
+A class containing:
+- `_scenes: dict[str, dict[str, Any]]` - scene name → (object ID → object data)
+- `_configurations: dict[str, TransformManager]` - configuration name → transform graph
 
-The Workspace is currently just a data container with no methods beyond `__init__`.
+### Scene Class (`src/scenetree/workspace.py`)
+A lightweight proxy providing dict-like access to objects in a scene. Supports `[]`, `del`, `in`, iteration, `len()`, `items()`, `update()`, and `|=`.
 
-### Public API (`src/frameforest/__init__.py`)
+### Public API (`src/scenetree/__init__.py`)
 Exports:
 - `Workspace` class
+- `Scene` class
 - `__version__` string
 
 ## Development Patterns
@@ -80,9 +82,9 @@ Keep this CLAUDE.md document updated when you learn new things about the project
 ## Project Structure
 
 ```
-frameforest/
+scenetree/
 ├── src/
-│   └── frameforest/
+│   └── scenetree/
 │       ├── __init__.py       # Public API
 │       ├── workspace.py      # Workspace class
 │       └── py.typed          # PEP 561 marker for type hints

@@ -1,10 +1,10 @@
-# frameforest
+# scenetree
 
 A Python library for managing geometric objects across coordinate frames, designed for metrology, measurement, fiducialisation, alignment, and adjustment tasks.
 
 ## Overview
 
-**frameforest** helps you organize and track geometric objects measured or constructed in different coordinate frames. It supports:
+**scenetree** helps you organize and track geometric objects measured or constructed in different coordinate frames. It supports:
 
 - **Objects**: Geometric entities (points, lines, spheres, etc.) from scikit-spatial, each with a unique ID
 - **Scenes**: Collections of objects with coordinates in specific frames (e.g., from a particular instrument or construction step)
@@ -13,25 +13,30 @@ A Python library for managing geometric objects across coordinate frames, design
 ## Installation
 
 ```bash
-uv add frameforest
+uv add scenetree
 ```
 
 Or with pip:
 
 ```bash
-pip install frameforest
+pip install scenetree
 ```
 
 ## Quick Start
 
 ```python
-from frameforest import Workspace
+from scenetree import Workspace
 
 # Create a workspace
-workspace = Workspace()
+ws = Workspace()
 
-# scenes: dict mapping frame names to objects in that frame
-# configurations: dict mapping configuration names to TransformManagers
+# Create scenes and add objects
+scene = ws.create_scene("laser_scan")
+scene["QP.F1"] = Point([1, 2, 3])
+scene |= {"QP.F2": Point([4, 5, 6]), "QP.F3": Point([7, 8, 9])}
+
+# Access objects
+point = ws["laser_scan"]["QP.F1"]
 ```
 
 ## Dependencies
