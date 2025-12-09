@@ -21,6 +21,7 @@ graph = ["pydot>=3.0.0"]
 
 [dependency-groups]
 dev = [
+    "pytest>=8.0",
     "ruff>=0.14.8",
     "ty>=0.0.0a6",
 ]
