@@ -1,5 +1,6 @@
 """Core workspace for managing geometric objects across coordinate frames."""
 
+import tempfile
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from copy import deepcopy
@@ -179,7 +180,7 @@ class Configuration:
         """Get the underlying TransformManager."""
         return self._workspace._configurations[self._name]
 
-    def connect(
+    def connect_by_transform(
         self, from_scene: str, to_scene: str, transform: npt.NDArray[np.floating[Any]]
     ) -> None:
         """Add a transform connecting two scenes.
@@ -225,7 +226,22 @@ class Configuration:
         """
         return deepcopy(self._get_tm())
 
-    def best_fit_points(
+    def get_graph_png(self) -> bytes:
+        """Render the transform graph as a PNG image.
+
+        Requires the 'graph' optional dependency: pip install scenetree[graph]
+
+        Returns:
+            PNG image data as bytes.
+
+        Raises:
+            ImportError: If pydot is not installed.
+        """
+        with tempfile.NamedTemporaryFile(suffix=".png") as f:
+            self._get_tm().write_png(f.name)
+            return f.read()
+
+    def connect_by_best_fit_points(
         self,
         from_scene: str,
         to_scene: str,
