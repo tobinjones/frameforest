@@ -15,13 +15,47 @@ import numpy as np
 import numpy.typing as npt
 from pytransform3d.transform_manager import TransformManager
 from scipy.spatial.transform import Rotation
-from skspatial.objects import Line, Point, Points
+from skspatial.objects import Line, Plane, Point, Points
 
 if TYPE_CHECKING:
     from collections.abc import ItemsView
 
 # Type alias for supported geometric object types
-SupportedObject = Point | Points | Line
+SupportedObject = Point | Points | Line | Plane
+
+
+def _transform_point(
+    point: npt.NDArray[np.floating[Any]],
+    transform: npt.NDArray[np.floating[Any]],
+) -> npt.NDArray[np.floating[Any]]:
+    """Apply a 4x4 homogeneous transform to a 3D point."""
+    homogeneous = np.append(point, 1.0)
+    transformed = transform @ homogeneous
+    return transformed[:3]
+
+
+def _transform_points(
+    points: npt.NDArray[np.floating[Any]],
+    transform: npt.NDArray[np.floating[Any]],
+) -> npt.NDArray[np.floating[Any]]:
+    """Apply a 4x4 homogeneous transform to an array of 3D points."""
+    # points is (n, 3), we need to add homogeneous coordinate
+    n = points.shape[0]
+    homogeneous = np.hstack([points, np.ones((n, 1))])
+    transformed = (transform @ homogeneous.T).T
+    return transformed[:, :3]
+
+
+def _transform_vector(
+    vector: npt.NDArray[np.floating[Any]],
+    transform: npt.NDArray[np.floating[Any]],
+) -> npt.NDArray[np.floating[Any]]:
+    """Apply only the rotation part of a 4x4 transform to a 3D vector.
+
+    This is used for direction vectors and normals, which should not be translated.
+    """
+    rotation_matrix = transform[:3, :3]
+    return rotation_matrix @ vector
 
 
 class Scene:
@@ -601,28 +635,6 @@ class View:
         """The reference scene name."""
         return self._reference_scene
 
-    def _transform_point(
-        self,
-        point: npt.NDArray[np.floating[Any]],
-        transform: npt.NDArray[np.floating[Any]],
-    ) -> npt.NDArray[np.floating[Any]]:
-        """Apply a 4x4 homogeneous transform to a 3D point."""
-        homogeneous = np.append(point, 1.0)
-        transformed = transform @ homogeneous
-        return transformed[:3]
-
-    def _transform_points(
-        self,
-        points: npt.NDArray[np.floating[Any]],
-        transform: npt.NDArray[np.floating[Any]],
-    ) -> npt.NDArray[np.floating[Any]]:
-        """Apply a 4x4 homogeneous transform to an array of 3D points."""
-        # points is (n, 3), we need to add homogeneous coordinate
-        n = points.shape[0]
-        homogeneous = np.hstack([points, np.ones((n, 1))])
-        transformed = (transform @ homogeneous.T).T
-        return transformed[:, :3]
-
     def get_object(self, from_scene: str, object_id: str) -> SupportedObject | NotImplementedType:
         """Get an object from another scene, transformed into the reference frame.
 
@@ -631,8 +643,8 @@ class View:
             object_id: The object ID to retrieve.
 
         Returns:
-            The transformed object (Point or Points), or NotImplemented if
-            the object type is not supported.
+            The transformed object (Point, Points, Line, or Plane), or NotImplemented
+            if the object type is not supported.
 
         Raises:
             KeyError: If the scene or object doesn't exist, or if no transform
@@ -648,12 +660,20 @@ class View:
 
         if isinstance(obj, Point):
             coords = np.asarray(obj)
-            transformed_coords = self._transform_point(coords, transform)
+            transformed_coords = _transform_point(coords, transform)
             return Point(transformed_coords)
         if isinstance(obj, Points):
             coords = np.asarray(obj)
-            transformed_coords = self._transform_points(coords, transform)
+            transformed_coords = _transform_points(coords, transform)
             return Points(transformed_coords)
+        if isinstance(obj, Line):
+            transformed_point = _transform_point(np.asarray(obj.point), transform)
+            transformed_direction = _transform_vector(np.asarray(obj.direction), transform)
+            return Line(transformed_point, transformed_direction)
+        if isinstance(obj, Plane):
+            transformed_point = _transform_point(np.asarray(obj.point), transform)
+            transformed_normal = _transform_vector(np.asarray(obj.normal), transform)
+            return Plane(transformed_point, transformed_normal)
         return NotImplemented
 
     def _get_connected_scenes(self) -> list[str]:
