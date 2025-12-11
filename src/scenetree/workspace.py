@@ -590,6 +590,72 @@ class Configuration:
 
         return transform
 
+    def connect_by_three_points(
+        self,
+        from_scene: str,
+        to_scene: str,
+        origin_id: str,
+        x_axis_id: str,
+        xy_plane_id: str,
+    ) -> npt.NDArray[np.floating[Any]]:
+        """Compute and add a transform using point-line-plane alignment.
+
+        This method performs a 3-2-1 alignment:
+        1. The origin point is translated to match exactly
+        2. The line from origin to x_axis point is rotated to align exactly
+        3. The plane defined by origin, x_axis, and xy_plane points is aligned optimally
+
+        The computed transform is added to this configuration.
+
+        Args:
+            from_scene: The source scene name.
+            to_scene: The destination scene name.
+            origin_id: Object ID for the origin point (fixed exactly).
+            x_axis_id: Object ID for the point defining the primary axis (aligned exactly).
+            xy_plane_id: Object ID for the point defining the plane (aligned optimally).
+
+        Returns:
+            The 4x4 homogeneous transformation matrix.
+
+        Raises:
+            KeyError: If either scene doesn't exist or any point is missing.
+
+        """
+        # Get points from both scenes
+        from_points_dict = self._workspace[from_scene].get_mean_points()
+        to_points_dict = self._workspace[to_scene].get_mean_points()
+
+        # Extract the three points from each scene
+        o_from = from_points_dict[origin_id]
+        a_from = from_points_dict[x_axis_id]
+        b_from = from_points_dict[xy_plane_id]
+
+        o_to = to_points_dict[origin_id]
+        a_to = to_points_dict[x_axis_id]
+        b_to = to_points_dict[xy_plane_id]
+
+        # Compute translation (origin alignment)
+        translation = o_to - o_from
+
+        # Compute rotation that:
+        # 1. Aligns the vector (a_from - o_from) to (a_to - o_to) exactly (weight=inf)
+        # 2. Optimally aligns (b_from - o_from) to (b_to - o_to) (weight=1)
+        rotation, _ = Rotation.align_vectors(
+            [a_to - o_to, b_to - o_to],
+            [a_from - o_from, b_from - o_from],
+            weights=[np.inf, 1],
+        )
+
+        # Build 4x4 homogeneous transform
+        transform = np.eye(4)
+        transform[:3, :3] = rotation.as_matrix()
+        transform[:3, 3] = translation
+
+        # Add to configuration
+        self._get_tm().add_transform(from_scene, to_scene, transform)
+
+        return transform
+
     def view_from(self, reference_scene: str) -> "View":
         """Create a View anchored to a reference scene.
 
